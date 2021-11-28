@@ -48,7 +48,24 @@ def tearDown(driver):
 # select the Title option for the criteria selector and hit the submitSearch button
 # wait for the results to return
 # obtain the available form elements
+
+def checkForSurvey(driver):
+    try:
+        time.sleep(.5)
+        no_thanky=driver.find_element(By.CLASS_NAME, 'fsrButton fsrButton__inviteDecline fsrDeclineButton')
+        no_thanky.click()
+        time.sleep(.5)
+        return
+    except NoSuchElementException:
+        return
     
+def checkForNoResults(driver):
+    try:
+        time.sleep(.5)
+        driver.find_element(By.ID, 'errorText')
+        return True
+    except NoSuchElementException:
+        return False
 
 def searchByFormName(forms):
     driver = setUp()
@@ -70,12 +87,16 @@ def searchByFormName(forms):
             # Submit the document
             searchBox.send_keys(Keys.RETURN)
             # Wait for the form to update
-            time.sleep(1)
+            time.sleep(.5)
+            if checkForNoResults(driver):
+                continue
+            checkForSurvey(driver)
             
             # Show as many records as possible
             show_200 = driver.find_element(By.XPATH, "//a[contains(text(),'200')]")
             show_200.click()
-            time.sleep(1)
+            time.sleep(.5)
+            checkForSurvey(driver)
             
             # obtain the elements and total from the page
             total = int(driver.find_element(By.CLASS_NAME, 'ShowByColumn').text.split(' of ')[1].split(' ')[0].replace(",", ""))
@@ -112,15 +133,20 @@ def searchByFormName(forms):
                 # Upon exhausting the page, Check that the nextPage is capable of being clicked
                 if nextPage:
                     nextPage.click()
-                    time.sleep(1)
+                    time.sleep(.5)
+                    checkForSurvey(driver)
                 # Otherwise, commit what we have, because we're done
                 else:
-                    results_list.append({
-                        "form_number": form_prod_number, 
-                        "form_title": form_title, 
-                        "min_year": min_year, 
-                        "max_year": max_year
-                    })
+                    # if for some reason the entered values are invalid, don't append anything and just continue on.
+                    if form_prod_number == None or form_title == None or min_year == 0 or max_year == 3000:
+                        continue
+                    else:
+                        results_list.append({
+                            "form_number": form_prod_number, 
+                            "form_title": form_title, 
+                            "min_year": min_year, 
+                            "max_year": max_year
+                        })
         return results_list
     except Exception as e:
         print(f"Error: {str(e)}")
