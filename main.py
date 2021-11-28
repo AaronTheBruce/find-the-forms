@@ -52,59 +52,75 @@ def tearDown(driver):
 
 def searchByFormName(forms):
     driver = setUp()
-    searchBox = driver.find_element(By.ID, 'searchFor')
-    selector = driver.find_element(By.NAME, 'criteria')
-    select_obj = Select(selector)
     # Form Title located in class = MiddleCellSpacer
     # Year Located in class = EndCellSpacer
     # Download asset located in class = LeftCellSpacer
     try:
         results_list = []
         for form in forms:    
+            searchBox = driver.find_element(By.ID, 'searchFor')
+            selector = driver.find_element(By.NAME, 'criteria')
+            select_obj = Select(selector)
             # preemptively clear the searchBox to remove any possible values
             searchBox.clear()
             # populate the searchBox with one of the form values the user provided
             searchBox.send_keys(form)
             # Change selector Option to Title
-            select_obj.select_by_value('title')
+            # select_obj.select_by_value('title')
             # Submit the document
             searchBox.send_keys(Keys.RETURN)
             # Wait for the form to update
             time.sleep(1)
-            # obtain the elements and total from the page
             
+            # Show as many records as possible
+            show_200 = driver.find_element(By.XPATH, "//a[contains(text(),'200')]")
+            show_200.click()
+            time.sleep(1)
+            
+            # obtain the elements and total from the page
             total = int(driver.find_element(By.CLASS_NAME, 'ShowByColumn').text.split(' of ')[1].split(' ')[0].replace(",", ""))
             count = 0
+            min_year = 3000
+            max_year = 0
+            form_title = None
+            form_prod_number = None
             while count < total:
                 dom_prod_number = driver.find_elements(By.CLASS_NAME, 'LeftCellSpacer')
                 dom_title_elements = driver.find_elements(By.CLASS_NAME, 'MiddleCellSpacer')
                 dom_year_elements = driver.find_elements(By.CLASS_NAME, 'EndCellSpacer')
+                # Check if there is a nextPage, if so, obtain it. Otherwise, ensure the script doesn't crash
                 nextPage = None
                 try:
                     nextPage = driver.find_element(By.XPATH, "//a[contains(text(),'Next')]")
                 except NoSuchElementException:
                     nextPage = None
-                # map out the titles from the dom_form_ele to prevent staleness
-                while count % 25 != 0 or count < total:
-                    print(f'count {count} total {total}')
-                    results_list.append({
-                        "form_number": dom_prod_number[count].text,
-                        "form_title": dom_title_elements[count].text,
-                        "year": dom_year_elements[count].text,
-                    })
+                # initialize an indexer to track parallel lists
+                index = 0
+                # check each record to see if it matches the given form name
+                for ele in dom_year_elements:
+                    # If it the names match, compare the years and track max and mins
+                    if dom_prod_number[index].text.strip() == form.strip():
+                        form_title = dom_title_elements[index].text.strip()
+                        form_prod_number = dom_prod_number[index].text.strip()
+                        if int(ele.text) > max_year:
+                            max_year = int(ele.text)
+                        if int(ele.text) < min_year:
+                            min_year = int(ele.text)
+                    # increment the count
                     count += 1
-                # Check that the nextPage is capable of being clicked
+                    index += 1
+                # Upon exhausting the page, Check that the nextPage is capable of being clicked
                 if nextPage:
                     nextPage.click()
                     time.sleep(1)
-            
-            # for title in titles:
-            #     count += 1
-            #     print(f"dom_form_ele {title} {count}")
-            #     results_list.append(title)
-            # Check for the next page
-        print(f"results_list {results_list}")
-        print(f"count {count}")
+                # Otherwise, commit what we have, because we're done
+                else:
+                    results_list.append({
+                        "form_number": form_prod_number, 
+                        "form_title": form_title, 
+                        "min_year": min_year, 
+                        "max_year": max_year
+                    })
         return results_list
     except Exception as e:
         print(f"Error: {str(e)}")
@@ -129,13 +145,7 @@ def getFormNames():
 action = promptAction(prompt)
 if action == 'F':
     form_names = getFormNames()
-    searchByFormName(form_names)
+    results = searchByFormName(form_names)
+    print("Results:")
+    pprint(results)
     
-
-# assert "IRS" in driver.title
-# elem = driver.find_element()
-# elem.clear()
-# elem.send_keys("pycon")
-# elem.send_keys(Keys.RETURN)
-# assert "No results found." not in driver.page_source
-# driver.close()
