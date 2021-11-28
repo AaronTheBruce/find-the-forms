@@ -1,10 +1,13 @@
 import os
+from pprint import pp
 import selenium
 from services.promptAction import promptAction
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
-# import time
+from selenium.webdriver.support.select import Select
+from prettyprinter import pprint
+import time
 # from PIL import Image
 import io
 import json
@@ -50,29 +53,44 @@ def searchByFormName(forms):
     driver = setUp()
     searchBox = driver.find_element(By.ID, 'searchFor')
     selector = driver.find_element(By.NAME, 'criteria')
+    select_obj = Select(selector)
     searchBtn = driver.find_element(By.NAME, 'submitSearch')
     # Form Title located in class = MiddleCellSpacer
     # Year Located in class = EndCellSpacer
     # Download asset located in class = LeftCellSpacer
     try:
         results_list = []
-        print(f"searchBox {searchBox}")
-        print(f"selector {selector}")
-        print(f"searchBtn {searchBtn}")
+        count = 0
         for form in forms:    
-            form = json(form)
+            print("Begin for loop")
             searchBox.clear()
-            searchBox.send_keys(form.getText())
+            print("SearchBox Cleared")
+            # populate the searchBox with one of the form values the user provided
+            searchBox.send_keys(form)
+            # Change selector Option to Title
+            select_obj.select_by_value('title')
+            print('Select Title')
+            # Submit the document
             searchBox.send_keys(Keys.RETURN)
+            print('Submit Form')
+            # Wait for the form to update
+            time.sleep(1)
+            # obtain the elements from the page
             dom_form_elements = driver.find_elements(By.CLASS_NAME, 'MiddleCellSpacer')
-            for item in dom_form_elements:
-                print(f"item {item}")
-                results_list.append(item)
+            print(f'dom elements gathered {dom_form_elements}')
+            # map out the titles from the dom_form_ele to prevent staleness
+            titles = [ele.text for ele in dom_form_elements]
+            print('dom elements mapped')
+            for title in titles:
+                count += 1
+                print(f"dom_form_ele {title} {count}")
+                results_list.append(title)
+        print(f"count {count}")
         return results_list
     except Exception as e:
         print(f"Error: {str(e)}")
-    finally:
-        tearDown(driver)
+    # finally:
+        # tearDown(driver)
 
 def getFormNames():
     more = True
