@@ -6,6 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
+from selenium.common.exceptions import NoSuchElementException  
 from prettyprinter import pprint
 import time
 # from PIL import Image
@@ -54,43 +55,61 @@ def searchByFormName(forms):
     searchBox = driver.find_element(By.ID, 'searchFor')
     selector = driver.find_element(By.NAME, 'criteria')
     select_obj = Select(selector)
-    searchBtn = driver.find_element(By.NAME, 'submitSearch')
     # Form Title located in class = MiddleCellSpacer
     # Year Located in class = EndCellSpacer
     # Download asset located in class = LeftCellSpacer
     try:
         results_list = []
-        count = 0
         for form in forms:    
-            print("Begin for loop")
+            # preemptively clear the searchBox to remove any possible values
             searchBox.clear()
-            print("SearchBox Cleared")
             # populate the searchBox with one of the form values the user provided
             searchBox.send_keys(form)
             # Change selector Option to Title
             select_obj.select_by_value('title')
-            print('Select Title')
             # Submit the document
             searchBox.send_keys(Keys.RETURN)
-            print('Submit Form')
             # Wait for the form to update
             time.sleep(1)
-            # obtain the elements from the page
-            dom_form_elements = driver.find_elements(By.CLASS_NAME, 'MiddleCellSpacer')
-            print(f'dom elements gathered {dom_form_elements}')
-            # map out the titles from the dom_form_ele to prevent staleness
-            titles = [ele.text for ele in dom_form_elements]
-            print('dom elements mapped')
-            for title in titles:
-                count += 1
-                print(f"dom_form_ele {title} {count}")
-                results_list.append(title)
+            # obtain the elements and total from the page
+            
+            total = int(driver.find_element(By.CLASS_NAME, 'ShowByColumn').text.split(' of ')[1].split(' ')[0].replace(",", ""))
+            count = 0
+            while count < total:
+                dom_prod_number = driver.find_elements(By.CLASS_NAME, 'LeftCellSpacer')
+                dom_title_elements = driver.find_elements(By.CLASS_NAME, 'MiddleCellSpacer')
+                dom_year_elements = driver.find_elements(By.CLASS_NAME, 'EndCellSpacer')
+                nextPage = None
+                try:
+                    nextPage = driver.find_element(By.XPATH, "//a[contains(text(),'Next')]")
+                except NoSuchElementException:
+                    nextPage = None
+                # map out the titles from the dom_form_ele to prevent staleness
+                while count % 25 != 0 or count < total:
+                    print(f'count {count} total {total}')
+                    results_list.append({
+                        "form_number": dom_prod_number[count].text,
+                        "form_title": dom_title_elements[count].text,
+                        "year": dom_year_elements[count].text,
+                    })
+                    count += 1
+                # Check that the nextPage is capable of being clicked
+                if nextPage:
+                    nextPage.click()
+                    time.sleep(1)
+            
+            # for title in titles:
+            #     count += 1
+            #     print(f"dom_form_ele {title} {count}")
+            #     results_list.append(title)
+            # Check for the next page
+        print(f"results_list {results_list}")
         print(f"count {count}")
         return results_list
     except Exception as e:
         print(f"Error: {str(e)}")
-    # finally:
-        # tearDown(driver)
+    finally:
+        tearDown(driver)
 
 def getFormNames():
     more = True
