@@ -2,17 +2,16 @@ import os
 from pprint import pp
 import selenium
 from services.promptAction import promptAction
+from services.getRangeOfYears import getRangeOfYears
+from services.downloadFile import downloadFile
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
 from selenium.common.exceptions import NoSuchElementException  
+from pathlib import Path
 from prettyprinter import pprint
 import time
-# from PIL import Image
-import io
-import json
-# import requests
 
 # global variables
 url = "https://apps.irs.gov/app/picklist/list/priorFormPublication.html"
@@ -21,10 +20,22 @@ url = "https://apps.irs.gov/app/picklist/list/priorFormPublication.html"
 prompt = True
 action = None
 
-def setUp():
-    driver = webdriver.Firefox()
-    driver.get(url)
-    return driver
+def setUp(download=False):
+    if download == False:
+        driver = webdriver.Chrome()
+        driver.get(url)
+        return driver
+    else:
+        chromeOptions = webdriver.ChromeOptions()
+        chromeOptions.add_experimental_option('prefs', {
+            # "download.default_directory": "C:/Users/XXXX/Desktop", #Change default directory for downloads
+            # "download.prompt_for_download": False, #To auto download the file
+            # "download.directory_upgrade": True,
+            "plugins.always_open_pdf_externally": True #It will not show PDF directly in chrome
+        })
+        driver = webdriver.Chrome(options=chromeOptions)
+        driver.get(url)
+        return driver 
 
 def tearDown(driver):
     driver.close()
@@ -52,7 +63,8 @@ def tearDown(driver):
 def checkForSurvey(driver):
     try:
         time.sleep(.5)
-        no_thanky=driver.find_element(By.CLASS_NAME, 'fsrButton fsrButton__inviteDecline fsrDeclineButton')
+        no_thanky=driver.find_element(By.XPATH, "//a[contains(text(),'No Thanks')]")
+        print("survey found!")
         no_thanky.click()
         time.sleep(.5)
         return
@@ -66,6 +78,67 @@ def checkForNoResults(driver):
         return True
     except NoSuchElementException:
         return False
+    
+def getDownloadsByFileNameAndYear(name, years):
+    
+    driver = setUp(True)
+    
+    try:        
+        searchBox = driver.find_element(By.ID, 'searchFor')
+        # preemptively clear the searchBox to remove any possible values
+        searchBox.clear()
+        # populate the searchBox with one of the form values the user provided
+        searchBox.send_keys(name)
+        # Submit the document
+        searchBox.send_keys(Keys.RETURN)
+        # Wait for the form to update
+        time.sleep(.5)
+        if checkForNoResults(driver):
+            return
+        checkForSurvey(driver)
+        
+        # Show as many records as possible
+        show_200 = driver.find_element(By.XPATH, "//a[contains(text(),'200')]")
+        show_200.click()
+
+        checkForSurvey(driver)
+        # Refactor into function, driver as an argument
+        # obtain the elements and total from the page
+        total = int(driver.find_element(By.CLASS_NAME, 'ShowByColumn').text.split(' of ')[1].split(' ')[0].replace(",", ""))
+        count = 0
+        while count < total:
+            dom_prod_number = driver.find_elements(By.CLASS_NAME, 'LeftCellSpacer')
+            dom_year_elements = driver.find_elements(By.CLASS_NAME, 'EndCellSpacer')
+            # Check if there is a nextPage, if so, obtain it. Otherwise, ensure the script doesn't crash
+            nextPage = None
+            try:
+                nextPage = driver.find_element(By.XPATH, "//a[contains(text(),'Next')]")
+            except NoSuchElementException:
+                nextPage = None
+            # initialize an indexer to track parallel lists
+            index = 0
+            # check each record to see if it matches the given form name
+            for ele in dom_year_elements:
+                # If it the names match, compare the years and track max and mins
+                if dom_prod_number[index].text.strip() == name.strip() and int(ele.text) in years:
+                    print(f"prod_num {dom_prod_number[index].text.strip()} name {name} year {ele.text}")
+                    time.sleep(.5)
+                    dom_prod_number[index].find_element(By.CSS_SELECTOR, 'a').click()
+                    time.sleep(.5)
+                # increment the count
+                count += 1
+                index += 1
+            # Upon exhausting the page, Check that the nextPage is capable of being clicked
+            if nextPage:
+                nextPage.click()
+                time.sleep(.5)
+                checkForSurvey(driver)
+            # Otherwise, commit what we have, because we're done
+    except Exception as e:
+        print(f"Error: {str(e)}")
+    finally:
+        tearDown(driver)
+        print("Ta Da!!")
 
 def searchByFormName(forms):
     driver = setUp()
@@ -76,14 +149,10 @@ def searchByFormName(forms):
         results_list = []
         for form in forms:    
             searchBox = driver.find_element(By.ID, 'searchFor')
-            selector = driver.find_element(By.NAME, 'criteria')
-            select_obj = Select(selector)
             # preemptively clear the searchBox to remove any possible values
             searchBox.clear()
             # populate the searchBox with one of the form values the user provided
             searchBox.send_keys(form)
-            # Change selector Option to Title
-            # select_obj.select_by_value('title')
             # Submit the document
             searchBox.send_keys(Keys.RETURN)
             # Wait for the form to update
@@ -97,7 +166,7 @@ def searchByFormName(forms):
             show_200.click()
             time.sleep(.5)
             checkForSurvey(driver)
-            
+            # Refactor into function, driver as an argument
             # obtain the elements and total from the page
             total = int(driver.find_element(By.CLASS_NAME, 'ShowByColumn').text.split(' of ')[1].split(' ')[0].replace(",", ""))
             count = 0
@@ -174,4 +243,11 @@ if action == 'F':
     results = searchByFormName(form_names)
     print("Results:")
     pprint(results)
+elif action == 'D':
+    form_name = input("What is the name of your form?: ")
+    first_year = int(input("Enter starting year: "))
+    last_year = int(input("Enter ending year: "))
+    years = getRangeOfYears(first_year, last_year)
+    
+    getDownloadsByFileNameAndYear(form_name, years)
     
